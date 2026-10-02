@@ -1,0 +1,251 @@
+@page "/lesson/{LessonId}"
+
+@inject LearningProgressService Progress
+@inject NavigationManager Nav
+
+<PageTitle>@(lesson?.Title ?? "课程") - Blazor 学习站</PageTitle>
+
+@if (lesson is null)
+{
+    <div class="alert alert-warning">
+        未找到课程 <strong>@LessonId</strong>。<a href="/courses">返回课程列表</a>
+    </div>
+}
+else
+{
+    <nav class="breadcrumb-nav" aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item"><a href="/">学习路线</a></li>
+            <li class="breadcrumb-item"><a href="/courses">全部课程</a></li>
+            <li class="breadcrumb-item active">@lesson.Title</li>
+        </ol>
+    </nav>
+
+    <div class="lesson-head">
+        <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+            <div>
+                <span class="text-secondary small">@module?.Title · @lesson.Minutes 分钟</span>
+                <h1 class="mt-1 mb-2">@lesson.Title</h1>
+                <p class="text-secondary mb-0">@lesson.Summary</p>
+            </div>
+            <div class="text-end">
+                @if (userId is null)
+                {
+                    <div class="text-secondary small mb-2">登录后记录你的学习进度</div>
+                    <a class="btn btn-primary" href="Account/Login">登录</a>
+                }
+                else
+                {
+                    <button class="btn @(completed ? "btn-outline-success" : "btn-success")" disabled="@working"
+                            @onclick="Toggle">
+                        @if (working)
+                        {
+                            <span>处理中…</span>
+                        }
+                        else if (completed)
+                        {
+                            <span><i class="bi bi-check-lg"></i> 已完成 · 点击撤销</span>
+                        }
+                        else
+                        {
+                            <span>标记为已完成</span>
+                        }
+                    </button>
+                    @if (message is not null)
+                    {
+                        <div class="small text-success mt-1">@message</div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex align-items-center gap-2 mb-4 lesson-progress">
+        <div class="progress flex-grow-1" style="height: 8px;">
+            <div class="progress-bar" role="progressbar" style="width: @modulePct%"></div>
+        </div>
+        <span class="small text-secondary">本模块进度 @moduleDone / @module?.Lessons.Count 节</span>
+    </div>
+
+    <div class="lesson-content">
+        @((MarkupString)lesson.Html)
+    </div>
+
+    <div class="d-flex justify-content-between mt-5 pt-4 border-top">
+        @if (prev is not null)
+        {
+            <button class="btn btn-outline-primary" @onclick="() => Go(prev!.Id)">
+                ← 上一课：@prev.Title
+            </button>
+        }
+        else
+        {
+            <span></span>
+        }
+
+        @if (next is not null)
+        {
+            <button class="btn btn-primary" disabled="@navigating" title="点击后自动将当前课标记为已完成，并进入下一课"
+                    @onclick="GoNext">
+                @if (navigating)
+                {
+                    <span>处理中…</span>
+                }
+                else
+                {
+                    <span>下一课：@next.Title →</span>
+                }
+            </button>
+        }
+        else
+        {
+            <a class="btn btn-success" href="/courses">🎉 已完成全部课程，返回学习路线</a>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string LessonId { get; set; } = "";
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private Course? lesson;
+    private LearningModule? module;
+    private Course? prev;
+    private Course? next;
+
+    private string? userId;
+    private bool completed;
+    private bool working;
+    private string? message;
+
+    /// <summary>当前模块内各课完成状态（含当前课），用于模块进度条。</summary>
+    private HashSet<string> moduleCompleted = [];
+
+    private int moduleDone;
+    private int modulePct;
+
+    /// <summary>加载请求版本号：防止快速连点「下一课」时旧请求的结果覆盖新课程。</summary>
+    private int _loadVersion;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var version = ++_loadVersion;
+
+        // 切换课程后清空上一课遗留的临时状态
+        working = false;
+        message = null;
+        completed = false;
+        moduleCompleted = [];
+        userId = null;
+        moduleDone = 0;
+        modulePct = 0;
+
+        lesson = Catalog.FindLesson(LessonId);
+        if (lesson is null) return;
+
+        module = Catalog.ModuleOf(LessonId);
+        prev = Catalog.PreviousLesson(LessonId);
+        next = Catalog.NextLesson(LessonId);
+
+        var state = await AuthState!;
+        if (version != _loadVersion) return;   // 期间已发生新导航，丢弃过期结果
+
+        var user = state.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (userId is not null)
+            {
+                // 一次查询拿到本模块所有课的状态，避免逐课查询
+                var done = await Progress.GetCompletedAsync(userId);
+                if (version != _loadVersion) return;   // 竞态防护
+
+                moduleCompleted = done
+                    .Where(id => module is not null && module.Lessons.Any(l => l.Id == id))
+                    .ToHashSet();
+                completed = moduleCompleted.Contains(LessonId);
+            }
+        }
+        RefreshModuleStats();
+    }
+
+    private void RefreshModuleStats()
+    {
+        if (module is null) return;
+        moduleDone = module.Lessons.Count(l => moduleCompleted.Contains(l.Id));
+        modulePct = module.Lessons.Count == 0
+            ? 0
+            : (int)Math.Round(100.0 * moduleDone / module.Lessons.Count);
+    }
+
+    private async Task Toggle()
+    {
+        if (userId is null || lesson is null) return;
+
+        working = true;
+        message = null;
+        try
+        {
+            completed = await Progress.ToggleAsync(userId, lesson.Id);
+            if (completed)
+            {
+                moduleCompleted.Add(lesson.Id);
+            }
+            else
+            {
+                moduleCompleted.Remove(lesson.Id);
+            }
+            RefreshModuleStats();
+            message = completed ? "已标记完成！" : "已撤销完成状态。";
+        }
+        catch (Exception ex)
+        {
+            message = "操作失败：" + ex.Message;
+        }
+        finally
+        {
+            working = false;
+        }
+    }
+
+    private void Go(string lessonId) => Nav.NavigateTo($"/lesson/{lessonId}");
+
+    /// <summary>防止「下一课」连点时重复提交。</summary>
+    private bool navigating;
+
+    /// <summary>
+    /// 下一课：若已登录且当前课未完成，先自动标记为完成，再跳转。
+    /// 进度保存失败不阻断学习（忽略错误继续导航）。
+    /// </summary>
+    private async Task GoNext()
+    {
+        if (navigating || next is null || lesson is null) return;
+        navigating = true;
+        try
+        {
+            if (userId is not null && !completed)
+            {
+                try
+                {
+                    completed = await Progress.ToggleAsync(userId, lesson.Id);
+                    if (completed)
+                    {
+                        moduleCompleted.Add(lesson.Id);
+                    }
+                    RefreshModuleStats();
+                }
+                catch
+                {
+                    // 忽略：进度保存失败仍继续学习
+                }
+            }
+        }
+        finally
+        {
+            navigating = false;
+        }
+        Nav.NavigateTo($"/lesson/{next.Id}");
+    }
+}

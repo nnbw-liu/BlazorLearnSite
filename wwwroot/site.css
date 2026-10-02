@@ -1,0 +1,230 @@
+/* ============================================================
+   Blazor 学习站自定义样式（叠加在 Bootstrap 之上）
+   ============================================================ */
+
+/* ---------- 通用 ---------- */
+body {
+    background-color: #f6f8fb;
+}
+
+.page-title {
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.section-title {
+    font-weight: 700;
+    margin-top: 1.5rem;
+}
+
+/* ---------- Hero 区 ---------- */
+.hero {
+    background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%);
+    color: #fff;
+    border-radius: 14px;
+    padding: 2.2rem 2.4rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.25);
+}
+
+.hero-title {
+    font-weight: 800;
+    font-size: 2.1rem;
+    margin-bottom: 0.6rem;
+}
+
+.hero-subtitle {
+    font-size: 1.02rem;
+    opacity: 0.92;
+    margin-bottom: 1.2rem;
+    line-height: 1.7;
+}
+
+.hero-stats {
+    display: flex;
+    gap: 2.2rem;
+    flex-wrap: wrap;
+}
+
+.stat-num {
+    font-size: 1.8rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    opacity: 0.85;
+}
+
+/* ---------- 模块卡片 ---------- */
+.module-card {
+    border: 1px solid #e5e9f2;
+    border-radius: 12px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.module-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.10);
+}
+
+.module-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: #eef2ff;
+    color: #2563eb;
+    font-size: 1.3rem;
+    margin-right: 0.75rem;
+    flex-shrink: 0;
+}
+
+/* ---------- 课程列表 ---------- */
+.lesson-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #eef2ff;
+    color: #64748b;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.lesson-status.done {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+/* ---------- 课程详情页 ---------- */
+.breadcrumb-nav {
+    margin-bottom: 0.5rem;
+}
+
+.breadcrumb-nav .breadcrumb {
+    --bs-breadcrumb-divider: '›';
+    font-size: 0.9rem;
+}
+
+.lesson-head {
+    background: #fff;
+    border: 1px solid #e5e9f2;
+    border-radius: 12px;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1rem;
+}
+
+.lesson-head h1 {
+    font-size: 1.55rem;
+    font-weight: 700;
+}
+
+.lesson-progress {
+    background: #fff;
+    border: 1px solid #e5e9f2;
+    border-radius: 12px;
+    padding: 0.6rem 1.2rem;
+}
+
+/* ---------- 课程正文（Markdown 渲染区） ---------- */
+.lesson-content {
+    background: #fff;
+    border: 1px solid #e5e9f2;
+    border-radius: 12px;
+    padding: 1.8rem 2.2rem;
+    line-height: 1.85;
+    font-size: 1rem;
+}
+
+.lesson-content h1,
+.lesson-content h2,
+.lesson-content h3,
+.lesson-content h4 {
+    font-weight: 700;
+    margin-top: 1.6rem;
+    margin-bottom: 0.7rem;
+}
+
+.lesson-content h1 { font-size: 1.5rem; border-bottom: 2px solid #e5e9f2; padding-bottom: 0.4rem; }
+.lesson-content h2 { font-size: 1.3rem; }
+.lesson-content h3 { font-size: 1.1rem; }
+.lesson-content h4 { font-size: 1rem; }
+
+.lesson-content p { margin-bottom: 0.8rem; }
+
+.lesson-content strong { color: #1d4ed8; }
+
+.lesson-content ul,
+.lesson-content ol { padding-left: 1.4rem; margin-bottom: 0.9rem; }
+
+.lesson-content li { margin-bottom: 0.3rem; }
+
+.lesson-content blockquote {
+    border-left: 4px solid #93c5fd;
+    background: #eff6ff;
+    padding: 0.7rem 1rem;
+    border-radius: 0 8px 8px 0;
+    margin: 1rem 0;
+    color: #1e40af;
+}
+
+.lesson-content blockquote p { margin-bottom: 0.3rem; }
+
+/* 代码块：深色主题 */
+.lesson-content pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 1rem 1.2rem;
+    border-radius: 10px;
+    overflow-x: auto;
+    margin: 1rem 0;
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+.lesson-content pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+}
+
+/* 行内代码 */
+.lesson-content code {
+    background: #eef2ff;
+    color: #4338ca;
+    padding: 0.15rem 0.4rem;
+    border-radius: 5px;
+    font-size: 0.88em;
+}
+
+/* 表格 */
+.lesson-content table {
+    width: 100%;
+    margin: 1rem 0;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+}
+
+.lesson-content th {
+    background: #f1f5f9;
+    font-weight: 700;
+    text-align: left;
+}
+
+.lesson-content th,
+.lesson-content td {
+    border: 1px solid #e2e8f0;
+    padding: 0.55rem 0.9rem;
+}
+
+.lesson-content tr:nth-child(even) td { background: #f8fafc; }
+
+/* 任务清单 */
+.lesson-content input[type="checkbox"] { margin-right: 0.4rem; }

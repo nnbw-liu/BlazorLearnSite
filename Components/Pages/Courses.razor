@@ -1,0 +1,72 @@
+@page "/courses"
+
+@inject LearningProgressService Progress
+
+<PageTitle>全部课程 - Blazor 学习站</PageTitle>
+
+<h1 class="page-title">全部课程</h1>
+<p class="text-secondary mb-4">
+    共 @Catalog.Modules.Count 个模块、@Catalog.TotalLessons 节课。已完成 @completedCount 节。
+</p>
+
+@foreach (var module in Catalog.Modules)
+{
+    var moduleDone = module.Lessons.Count(l => completed.Contains(l.Id));
+    var modulePct = module.Lessons.Count == 0 ? 0 : (int)Math.Round(100.0 * moduleDone / module.Lessons.Count);
+
+    <div class="card mb-4">
+        <div class="card-header bg-white d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+                <span class="module-icon me-2"><i class="bi @module.Icon"></i></span>
+                <strong>模块 @module.Order · @module.Title</strong>
+            </div>
+            <div class="d-flex align-items-center gap-2" style="min-width: 220px;">
+                <div class="progress flex-grow-1" style="height: 8px;">
+                    <div class="progress-bar" role="progressbar" style="width: @modulePct%"></div>
+                </div>
+                <span class="small text-secondary">@moduleDone/@module.Lessons.Count</span>
+            </div>
+        </div>
+        <div class="list-group list-group-flush">
+            @foreach (var lesson in module.Lessons)
+            {
+                var done = completed.Contains(lesson.Id);
+
+                <a class="list-group-item list-group-item-action d-flex align-items-center gap-3" href="/lesson/@lesson.Id">
+                    <span class="lesson-status @(done ? "done" : "")">
+                        <i class="bi @(done ? "bi-check-lg" : "bi-circle")"></i>
+                    </span>
+                    <span class="flex-grow-1">
+                        <span class="d-block">@lesson.Title</span>
+                        <span class="small text-secondary">@lesson.Summary</span>
+                    </span>
+                    <span class="badge text-bg-light">@lesson.Minutes 分钟</span>
+                </a>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private HashSet<string> completed = [];
+    private int completedCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState!;
+        var user = state.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (userId is not null)
+            {
+                completed = (await Progress.GetCompletedAsync(userId)).ToHashSet();
+                completedCount = completed.Count;
+            }
+        }
+    }
+}

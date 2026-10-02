@@ -1,0 +1,8 @@
+bin/
+obj/
+*.user
+.vs/
+Data/app.db
+Data/app.db-shm
+Data/app.db-wal
+logs/

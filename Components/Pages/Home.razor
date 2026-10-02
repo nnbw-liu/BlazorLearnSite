@@ -1,0 +1,112 @@
+@page "/"
+
+@inject LearningProgressService Progress
+@inject NavigationManager Nav
+
+<PageTitle>Blazor 学习路线 - Blazor 学习站</PageTitle>
+
+<div class="hero">
+    <h1 class="hero-title">Blazor 学习路线图</h1>
+    <p class="hero-subtitle">
+        从基础到工程化的完整学习路径：组件模型、渲染模式、控件、三方库、身份认证与整体架构。<br />
+        注册并登录后，系统会<strong>按你的身份记录每节课的学习进度</strong>。
+    </p>
+    <div class="hero-stats">
+        <div class="stat"><div class="stat-num">@Catalog.Modules.Count</div><div class="stat-label">学习模块</div></div>
+        <div class="stat"><div class="stat-num">@Catalog.TotalLessons</div><div class="stat-label">课程总数</div></div>
+        <div class="stat"><div class="stat-num">@(Math.Round(progressPercent))%</div><div class="stat-label">我的总进度</div></div>
+    </div>
+</div>
+
+@if (userId is null)
+{
+    <div class="alert alert-info d-flex justify-content-between align-items-center">
+        <span>登录后即可记录学习进度，进度数据会按账号长期保存。</span>
+        <a class="btn btn-primary btn-sm" href="Account/Login">立即登录</a>
+    </div>
+}
+else
+{
+    <div class="alert alert-success d-flex justify-content-between align-items-center">
+        <span>
+            你好，<strong>@userName</strong>！已完成 <strong>@completedCount</strong> / @Catalog.TotalLessons 节课。
+        </span>
+        <a class="btn btn-outline-success btn-sm" href="courses">查看全部课程</a>
+    </div>
+}
+
+<div class="progress mb-4" style="height: 14px;">
+    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+         style="width: @progressPercent%">@(Math.Round(progressPercent))%</div>
+</div>
+
+<h2 class="section-title">六个学习模块</h2>
+<p class="text-secondary mb-4">按顺序学习效果最佳；每节课末尾都有自测题，点开即可开始。</p>
+
+<div class="row g-4">
+    @foreach (var module in Catalog.Modules)
+    {
+        var firstLesson = module.Lessons[0];
+        var moduleDone = module.Lessons.Count(l => completed.Contains(l.Id));
+        var modulePct = module.Lessons.Count == 0 ? 0 : (int)Math.Round(100.0 * moduleDone / module.Lessons.Count);
+
+        <div class="col-md-6 col-xl-4">
+            <div class="card module-card h-100">
+                <div class="card-body d-flex flex-column">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="module-icon"><i class="bi @module.Icon"></i></span>
+                        <div>
+                            <span class="text-secondary small">模块 @module.Order</span>
+                            <h5 class="card-title mb-0">@module.Title</h5>
+                        </div>
+                    </div>
+                    <p class="card-text text-secondary flex-grow-1">@module.Summary</p>
+
+                    <div class="d-flex justify-content-between small text-secondary mb-1">
+                        <span>@moduleDone / @module.Lessons.Count 节课</span>
+                        <span>@modulePct%</span>
+                    </div>
+                    <div class="progress mb-3" style="height: 8px;">
+                        <div class="progress-bar" role="progressbar" style="width: @modulePct%"></div>
+                    </div>
+
+                    <button class="btn btn-primary" @onclick="() => Go(firstLesson.Id)">
+                        开始学习 →
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string? userId;
+    private string? userName;
+    private HashSet<string> completed = [];
+    private int completedCount;
+
+    private double progressPercent =>
+        Catalog.TotalLessons == 0 ? 0 : 100.0 * completedCount / Catalog.TotalLessons;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState!;
+        var user = state.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            userName = user.Identity.Name;
+            if (userId is not null)
+            {
+                completed = (await Progress.GetCompletedAsync(userId)).ToHashSet();
+                completedCount = completed.Count;
+            }
+        }
+    }
+
+    private void Go(string lessonId) => Nav.NavigateTo($"/lesson/{lessonId}");
+}
