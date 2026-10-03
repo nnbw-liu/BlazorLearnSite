@@ -5,7 +5,7 @@ services:
     image: blazor-learn-site:latest
     container_name: blazor-learn-site
     ports:
-      - "80:8080"            # 宿主机 8080 → 容器 8080
+      - "8080:8080"            # 宿主机 8080 → 容器 8080
     environment:
       # SQLite 数据库放在持久化卷内，容器重建不丢数据
       - ConnectionStrings__DefaultConnection=Data Source=/app/Data/app.db
