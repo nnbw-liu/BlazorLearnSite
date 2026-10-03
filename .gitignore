@@ -1,0 +1,19 @@
+# 构建产物
+bin/
+obj/
+*.user
+
+# IDE
+.vs/
+
+# 本地数据库（服务器首次启动会自动创建）
+Data/app.db
+Data/app.db-shm
+Data/app.db-wal
+
+# 日志与发布测试目录
+logs/
+publish-test/
+
+# 部署压缩包
+*.zip

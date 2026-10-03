@@ -1,74 +1,77 @@
-# Docker 部署手册（从零开始，保姆级）
+# Docker 部署手册（宝塔无软件商店版，纯命令行）
 
-> 写给第一次用 Docker 的人。照着做，把 Blazor 学习站跑起来。
-> 用 Docker 部署能绕开上一回那个 `GLIBC_2.33 not found` 报错——官方镜像自带兼容环境，不再依赖服务器系统版本。
+> 你的宝塔没有软件商店，那就全程用命令行（SSH）操作。
+> 宝塔这边只需要做两件事：**传项目文件**、**放行端口**。其余全部在终端里完成。
 
 ---
 
-## 第 1 步：先确认服务器是什么系统、项目在哪
+## 第 0 步：准备一个终端
+
+用宝塔的「终端」功能（左侧菜单有终端图标），或者自己用 SSH 工具登录（Windows 自带：
 
 ```bash
-# 看系统版本（决定用哪套安装命令）
+ssh admin@服务器公网IP
+```
+
+登录后先确认系统版本——后面有的命令分系统，先看一眼：
+
+```bash
 cat /etc/os-release | grep PRETTY_NAME
-
-# 看项目目录（下面的手册以这个路径为例，换成你实际的）
-ls /home/www/code/BlazorLearnSite
 ```
 
-确认目录里有这几个文件（部署必需）：
+记住输出是 Ubuntu / Debian / CentOS 哪一类。
+
+## 第 1 步：把项目传到服务器（用宝塔文件管理器）
+
+宝塔 → 文件 → 进入 `/home/www/code/BlazorLearnSite`（没有就新建，路径随意）→ **上传**，把本地 `C:\Code\SDemo\BlazorLearnSite` 里的文件传上去。
+
+确认目录里有这些关键文件：
 
 ```
-Dockerfile            # 镜像怎么构建
-docker-compose.yml    # 一键编排：端口、数据卷、重启策略
-.dockerignore         # 构建时排除 bin/obj
+Dockerfile
+docker-compose.yml
+BlazorLearnSite.csproj
+Program.cs
+Components/
 ```
 
-没有的话，从本地项目（`C:\Code\SDemo\BlazorLearnSite`）把整个目录传到服务器再继续。
+## 第 2 步：安装 Docker
 
-## 第 2 步：检查 Docker 装没装
+官方一键脚本，自动识别你的系统，一行装完：
+
+```bash
+curl -fsSL https://get.docker.com | sh
+```
+
+装完启动并设置开机自启：
+
+```bash
+systemctl enable --now docker
+```
+
+验证装好了（三条命令都要有输出）：
 
 ```bash
 docker --version
 docker compose version
 ```
 
-**看到版本号** → 跳到第 4 步。
+> 如果 `docker compose version` 报错（提示不是 docker 命令），说明 Docker 版本太老没带 compose 插件，单独装：
+> ```bash
+> apt install -y docker-compose-plugin      # Ubuntu/Debian
+> # 或
+> yum install -y docker-compose-plugin      # CentOS
+> ```
 
-**提示 `command not found`** → 没装，走第 3 步。
-
-> 小知识：新版 Docker 自带 `docker compose`（子命令）；老版本是独立的 `docker-compose` 命令。本手册用新写法 `docker compose`。
-
-## 第 3 步：安装 Docker
-
-最省事的方式是官方一键脚本，它自动识别系统版本：
-
-```bash
-curl -fsSL https://get.docker.com | sh
-```
-
-跑完启动并设为开机自启：
-
-```bash
-systemctl enable --now docker
-systemctl status docker
-```
-
-看到 `active (running)` 就成功了。如果 `systemctl` 提示不存在（极老系统），改用：
-
-```bash
-service docker start
-service docker enable 2>/dev/null || true
-```
-
-## 第 4 步：验证 Docker 能不能用
+## 第 3 步：验证 Docker 能拉镜像（国内网络可能卡在这）
 
 ```bash
 docker run --rm hello-world
 ```
 
-正常会打印一段 "Hello from Docker!"。
+正常会打印 "Hello from Docker!"。
 
-**如果卡住或超时**（国内服务器很常见）：是拉镜像太慢，配置镜像加速。阿里云用户建议先去容器镜像服务控制台领一个专属加速地址，也可以直接用公共源：
+**卡住/超时** → 配国内镜像加速：
 
 ```bash
 mkdir -p /etc/docker
@@ -83,46 +86,48 @@ EOF
 systemctl restart docker
 ```
 
-配完重新跑 `docker run --rm hello-world`。
+配完重新跑 `docker run --rm hello-world`，能打印就 OK。
 
-## 第 5 步：构建并启动（核心一步）
+## 第 4 步：构建并启动（核心一步）
 
 ```bash
 cd /home/www/code/BlazorLearnSite
 docker compose up -d --build
 ```
 
-解释一下这条命令在干什么：**--build** 先按 Dockerfile 构建镜像（下载 .NET SDK → 编译发布 → 打包成运行镜像），然后 **-d** 后台启动容器。
+**第一次等几分钟**（下载 .NET SDK 镜像 → 编译 → 打包），看到 `Started` 或 `done` 就成功了。
 
-- 首次执行要下载镜像 + 编译，**耐心等几分钟**，看到 `Started` 或 `done` 字样即成功。
-- 之后每次更新代码重新执行这条命令，只需几秒到几十秒。
+> 图形化界面看不到容器是正常的——你手动装的 Docker 不走宝塔 Docker 管理器，管理全靠命令（见第 6 步）。
 
-## 第 6 步：验证跑起来了
+## 第 5 步：放行端口（最容易漏，两道墙都要开）
+
+**① 阿里云安全组**（浏览器打开阿里云控制台）
+- ECS 实例 → 安全组 → 配置规则 → 入方向 → 手动添加
+- 协议 TCP、端口 **8080**、授权对象 `0.0.0.0/0`
+
+**② 服务器系统防火墙**（终端执行，按第 0 步看到的系统选一条）
 
 ```bash
-# 看容器状态：STATUS 应该是 Up，端口 8080 有映射
-docker ps
+# CentOS / Alibaba Cloud Linux
+firewall-cmd --permanent --add-port=8080/tcp && firewall-cmd --reload
 
-# 本机试请求：返回 HTML 即正常
-curl -s http://localhost:8080 | head -20
-
-# 看日志（Ctrl+C 退出）：
-docker compose logs -f
+# Ubuntu / Debian（装过 ufw 才需要，没装忽略）
+ufw allow 8080
 ```
 
-## 第 7 步：浏览器访问
+> 如果宝塔面板里有「安全」页，也可以在那里放行 8080，效果一样。
 
-打开 `http://服务器公网IP:8080`。
+## 第 6 步：验证并访问
 
-**打不开？九成是安全组没放行**。阿里云控制台 → ECS 实例 → 安全组 → 配置规则 → 入方向 → 添加规则：
+```bash
+docker ps                 # STATUS 应为 Up
+curl -s http://localhost:8080 | head -20    # 返回 HTML
+docker compose logs -f    # 看日志，Ctrl+C 退出
+```
 
-- 协议：TCP
-- 端口：8080
-- 授权对象：`0.0.0.0/0`
+浏览器打开 `http://服务器公网IP:8080`，注册账号开始用。
 
-加完再刷新浏览器。
-
-## 第 8 步：日常管理
+## 第 7 步：日常管理（全部命令）
 
 ```bash
 # 停止 / 启动 / 重启
@@ -130,41 +135,51 @@ docker compose stop
 docker compose start
 docker compose restart
 
-# 看日志（-f 持续跟随，Ctrl+C 退出）
+# 看日志
 docker compose logs -f
 
-# 更新代码后重新部署（进项目目录执行）
+# 更新代码后重新部署（重新上传文件后执行）
 docker compose up -d --build
 
 # 完全停掉并删除容器（数据卷保留，数据不丢）
 docker compose down
 ```
 
-**数据在哪**：用户、进度都存在 Docker 卷里（`/app/Data` 挂载点），容器删了重建数据也还在。
+**数据在哪**：用户和进度存在 Docker 卷里（容器内 `/app/Data`），容器删了重建数据还在。备份：
 
 ```bash
-docker volume ls        # 会看到 blazor-learnsite_blazor-data 之类的名字
+docker volume ls
+# 找到类似 blazor-learnsite_blazor-data 的名字，替换到下面命令
+docker run --rm -v blazor-learnsite_blazor-data:/data -v $(pwd):/backup alpine tar czf /backup/blazor-data-backup.tar.gz -C /data .
 ```
 
-备份数据：
+## 第 8 步：想用 80 端口 / 域名访问（可选）
 
-```bash
-docker run --rm -v blazor-learnsite_blazor-data:/data -v $(pwd):/backup alpine tar czf /backup/blazor-data-backup.tar.gz -C /data .
+把 `docker-compose.yml` 里的端口映射改一下：
+
+```yaml
+ports:
+  - "80:8080"
+```
+
+然后 `docker compose up -d` 重建，安全组和防火墙放行 **80** 端口，浏览器访问 `http://IP`。
+
+要域名 + HTTPS：用宝塔「网站」功能建站反代到 `http://127.0.0.1:8080`，**必须**在反代配置里加这两个请求头，否则页面一直「正在重新连接」：
+
+```
+Upgrade    $http_upgrade
+Connection "upgrade"
 ```
 
 ## 常见问题速查
 
 | 现象 | 处理 |
 |---|---|
-| `command not found` | 没装或刚装没生效：重新登录 SSH，或重启服务器 |
-| `permission denied ... docker.sock` | 当前用户不在 docker 组：前面加 `sudo`，或 `sudo usermod -aG docker $USER` 后重新登录 |
-| 拉镜像超时 | 第 4 步的镜像加速配置 |
-| `8080: bind: address already in use` | 端口被占：把 compose 里 `"8080:8080"` 改成 `"8081:8080"`（左边是宿主机端口） |
-| 容器一直在重启 | `docker compose logs` 看具体报错，大多是代码或数据库权限问题 |
-| 想直接用 80 端口访问 | compose 里改成 `"80:8080"`，安全组放行 80 |
-| 数据丢了 | 确认没用过 `docker compose down -v`（-v 会连卷一起删，慎用） |
-
-## 部署完成后
-
-- 想要域名 + HTTPS：用 Nginx 反代，见 `DEPLOY.md` 第 3 节（注意 SignalR 的 Upgrade 头配置）。
-- 代码改动后更新：重新上传代码 → `docker compose up -d --build`，数据卷不动，进度不丢。
+| `curl: command not found` | `apt install -y curl` 或 `yum install -y curl` |
+| `docker: command not found` | 第 2 步安装失败，重跑；或 `systemctl restart docker` 后重登 |
+| `permission denied ... docker.sock` | 命令前加 `sudo`；或 `sudo usermod -aG docker $USER` 后重新登录 |
+| 拉镜像超时/卡住 | 第 3 步镜像加速配置 |
+| `8080: bind: address already in use` | 端口被占：compose 里改成 `"8081:8080"`（左边是宿主机端口） |
+| 容器一直在重启 | `docker compose logs` 看报错 |
+| 本机 curl 通、外网打不开 | 阿里云安全组没放行 8080（第 5 步） |
+| 页面「正在重新连接」 | 反代缺 WebSocket 头（第 8 步） |
