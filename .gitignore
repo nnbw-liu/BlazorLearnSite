@@ -13,6 +13,7 @@ Data/app.db-wal
 
 # 日志与发布测试目录
 logs/
+publish/
 publish-test/
 
 # 部署压缩包
