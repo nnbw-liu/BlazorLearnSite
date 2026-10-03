@@ -1,29 +1,30 @@
-# Docker 部署手册（宝塔无软件商店版，纯命令行）
+# Docker 部署手册（Alibaba Cloud Linux 3，宝塔无软件商店，纯命令行）
 
-> 你的宝塔没有软件商店，那就全程用命令行（SSH）操作。
-> 宝塔这边只需要做两件事：**传项目文件**、**放行端口**。其余全部在终端里完成。
+> 你的服务器是阿里云轻量应用服务器自带的 **Alibaba Cloud Linux 3（alinux3）**。
+> 宝塔没有软件商店，所以全程命令行操作；宝塔这边只需要**传项目文件**和**放行端口**。
+> 用 Docker 部署能绕开之前那个 `GLIBC_2.33 not found` 报错——官方镜像自带兼容环境，跟服务器系统版本无关。
 
 ---
 
-## 第 0 步：准备一个终端
+## 第 0 步：准备终端 + 确认系统
 
-用宝塔的「终端」功能（左侧菜单有终端图标），或者自己用 SSH 工具登录（Windows 自带：
+用宝塔的「终端」功能，或者自己 SSH 登录（Windows 自带）：
 
 ```bash
 ssh admin@服务器公网IP
 ```
 
-登录后先确认系统版本——后面有的命令分系统，先看一眼：
+确认系统版本（alinux3 或 alinux2，安装命令不同）：
 
 ```bash
-cat /etc/os-release | grep PRETTY_NAME
+cat /etc/alinux-release
 ```
-
-记住输出是 Ubuntu / Debian / CentOS 哪一类。
 
 ## 第 1 步：把项目传到服务器（用宝塔文件管理器）
 
-宝塔 → 文件 → 进入 `/home/www/code/BlazorLearnSite`（没有就新建，路径随意）→ **上传**，把本地 `C:\Code\SDemo\BlazorLearnSite` 里的文件传上去。
+宝塔 → 文件 → 进入 `/home/www/code/BlazorLearnSite`（没有就新建）→ **上传**，把项目文件传上去。
+
+> 推荐用 Git：本地 `git push` 后，服务器 `git clone git@github.com:nnbw-liu/BlazorLearnSite.git`（或 `git pull`），更省事，更新也方便。
 
 确认目录里有这些关键文件：
 
@@ -35,58 +36,80 @@ Program.cs
 Components/
 ```
 
-## 第 2 步：安装 Docker
+## 第 2 步：安装 Docker（alinux3 专用，不能用 get.docker.com）
 
-官方一键脚本，自动识别你的系统，一行装完：
+> ⚠️ 注意：`get.docker.com` 一键脚本**不支持 alinux**，直接跑会报 `Unsupported distribution 'alinux'`。
+> 你这台是 alinux3，用下面的 `dnf` 方式安装。下面命令依次复制执行：
 
-```bash
-curl -fsSL https://get.docker.com | sh
-```
-
-装完启动并设置开机自启：
+**① 先卸载旧 Docker**（没有就跳过，报错忽略）：
 
 ```bash
-systemctl enable --now docker
+sudo dnf -y remove docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo rm -f /etc/yum.repos.d/docker*.repo
 ```
 
-验证装好了（三条命令都要有输出）：
+**② 安装 alinux3 兼容插件**（关键！不然源识别失败）：
+
+```bash
+sudo dnf -y install dnf-plugin-releasever-adapter --repo alinux3-plus
+```
+
+**③ 添加 docker-ce 阿里云镜像源**：
+
+```bash
+sudo wget -O /etc/yum.repos.d/docker-ce.repo http://mirrors.cloud.aliyuncs.com/docker-ce/linux/centos/docker-ce.repo
+sudo sed -i 's|https://mirrors.aliyun.com|http://mirrors.cloud.aliyuncs.com|g' /etc/yum.repos.d/docker-ce.repo
+```
+
+**④ 安装 docker 全套（含 compose 插件）**：
+
+```bash
+sudo dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin --nobest
+```
+
+**⑤ 启动 + 开机自启**：
+
+```bash
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+
+**⑥ 把当前 admin 用户加入 docker 组**（以后不用 sudo）：
+
+```bash
+sudo usermod -aG docker $USER
+```
+
+> ⚠️ 用户组生效需要**重新 SSH 登录一次**。不重连的话，执行 docker 命令还是要加 `sudo`。
+
+> 如果你系统是 **alinux2**，把第②步换成 yum 版本：
+> ```bash
+> sudo yum install yum-plugin-releasever-adapter --repo alinux2-plus
+> ```
+
+## 第 3 步：验证 Docker + 配置镜像加速
+
+验证：
 
 ```bash
 docker --version
 docker compose version
+sudo docker run hello-world
 ```
 
-> 如果 `docker compose version` 报错（提示不是 docker 命令），说明 Docker 版本太老没带 compose 插件，单独装：
-> ```bash
-> apt install -y docker-compose-plugin      # Ubuntu/Debian
-> # 或
-> yum install -y docker-compose-plugin      # CentOS
-> ```
-
-## 第 3 步：验证 Docker 能拉镜像（国内网络可能卡在这）
+正常会打印 "Hello from Docker!"。**卡住/超时**是拉镜像慢，配置阿里云镜像加速（推荐，拉镜像快很多）：
 
 ```bash
-docker run --rm hello-world
-```
-
-正常会打印 "Hello from Docker!"。
-
-**卡住/超时** → 配国内镜像加速：
-
-```bash
-mkdir -p /etc/docker
-cat > /etc/docker/daemon.json <<'EOF'
+sudo tee /etc/docker/daemon.json <<-'EOF'
 {
-  "registry-mirrors": [
-    "https://docker.m.daocloud.io",
-    "https://docker.1panel.live"
-  ]
+  "registry-mirrors": ["https://mirror.baidubce.com"]
 }
 EOF
-systemctl restart docker
+sudo systemctl daemon-reload
+sudo systemctl restart docker
 ```
 
-配完重新跑 `docker run --rm hello-world`，能打印就 OK。
+配完重新跑 `sudo docker run hello-world`，能打印就 OK。
 
 ## 第 4 步：构建并启动（核心一步）
 
@@ -97,7 +120,7 @@ docker compose up -d --build
 
 **第一次等几分钟**（下载 .NET SDK 镜像 → 编译 → 打包），看到 `Started` 或 `done` 就成功了。
 
-> 图形化界面看不到容器是正常的——你手动装的 Docker 不走宝塔 Docker 管理器，管理全靠命令（见第 6 步）。
+> 手动装的 Docker 不走宝塔 Docker 管理器，面板里看不到容器是正常的，管理全靠命令（见第 6 步）。
 
 ## 第 5 步：放行端口（最容易漏，两道墙都要开）
 
@@ -105,14 +128,10 @@ docker compose up -d --build
 - ECS 实例 → 安全组 → 配置规则 → 入方向 → 手动添加
 - 协议 TCP、端口 **8080**、授权对象 `0.0.0.0/0`
 
-**② 服务器系统防火墙**（终端执行，按第 0 步看到的系统选一条）
+**② 服务器系统防火墙**（终端执行，alinux 用 firewalld）：
 
 ```bash
-# CentOS / Alibaba Cloud Linux
-firewall-cmd --permanent --add-port=8080/tcp && firewall-cmd --reload
-
-# Ubuntu / Debian（装过 ufw 才需要，没装忽略）
-ufw allow 8080
+sudo firewall-cmd --permanent --add-port=8080/tcp && sudo firewall-cmd --reload
 ```
 
 > 如果宝塔面板里有「安全」页，也可以在那里放行 8080，效果一样。
@@ -138,7 +157,7 @@ docker compose restart
 # 看日志
 docker compose logs -f
 
-# 更新代码后重新部署（重新上传文件后执行）
+# 更新代码后重新部署（重新 git pull / 上传文件后执行）
 docker compose up -d --build
 
 # 完全停掉并删除容器（数据卷保留，数据不丢）
@@ -175,9 +194,10 @@ Connection "upgrade"
 
 | 现象 | 处理 |
 |---|---|
-| `curl: command not found` | `apt install -y curl` 或 `yum install -y curl` |
+| `Unsupported distribution 'alinux'` | 别用 get.docker.com，按第 2 步 dnf 方式装 |
+| `curl: command not found` | `sudo dnf install -y curl` |
 | `docker: command not found` | 第 2 步安装失败，重跑；或 `systemctl restart docker` 后重登 |
-| `permission denied ... docker.sock` | 命令前加 `sudo`；或 `sudo usermod -aG docker $USER` 后重新登录 |
+| `permission denied ... docker.sock` | 没重登用户组未生效：命令前加 `sudo`，或重新 SSH 登录 |
 | 拉镜像超时/卡住 | 第 3 步镜像加速配置 |
 | `8080: bind: address already in use` | 端口被占：compose 里改成 `"8081:8080"`（左边是宿主机端口） |
 | 容器一直在重启 | `docker compose logs` 看报错 |
