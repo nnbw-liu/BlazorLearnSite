@@ -6,26 +6,27 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# 先复制项目文件与 Razor 组件再还原依赖（利用层缓存）
+# 先把全部源码复制进来，再 restore。
 #
-# ⚠️ 关键：restore 之前 .razor 文件必须已经就位。
-# Web SDK 只有在 restore 时“看得到” .razor 文件，才会注入
-# Microsoft.AspNetCore.App.Internal.Assets（它携带 wwwroot/_framework/*.js）。
-# 若只复制 .csproj 就 restore，随后的 --no-restore 发布会“成功”，
-# 但产物里没有 wwwroot/_framework/，MapStaticAssets 不注册 _framework 路由，
-# 线上表现为 /_framework/blazor.web.js → 404：页面能显示，但 Blazor 电路
-# 永远建立不起来，所有 @onclick 按钮（如“开始学习”）全部失效。
-COPY BlazorLearnSite.csproj ./
-COPY Components/ ./Components/
+# ⚠️ 顺序不能改：Web SDK 只有在 restore 期间“看得见” .razor 文件时，才会注入
+# Microsoft.AspNetCore.App.Internal.Assets —— 该包携带 wwwroot/_framework/*.js。
+# 若采用“只复制 .csproj → restore → 再 COPY 源码”的写法（看似能利用层缓存），
+# 发布一样会成功，但产物里没有 wwwroot/_framework/，MapStaticAssets 也就不会
+# 注册 _framework 路由。线上表现：页面能正常显示，但 /_framework/blazor.web.js
+# 返回 404 → Blazor 电路建立不起来 → 所有 @onclick 按钮（如首页“开始学习”）
+# 全部失效，而普通 <a href> 链接仍然可用。参见 dotnet/aspnetcore#69341。
+COPY . .
 RUN dotnet restore "BlazorLearnSite.csproj"
 
-# 复制全部源码并发布
-COPY . .
+# 发布（restore 已完成）
 RUN dotnet publish "BlazorLearnSite.csproj" -c Release -o /app/publish --no-restore
 
-# 构建期断言：框架脚本必须在产物中，缺失就让构建直接失败，避免静默发出“按钮全失效”的站点
+# 构建期断言：框架脚本必须在产物中，缺失就让构建直接失败，
+# 而不是静默发出一个“按钮全失效”的站点
 RUN test -f /app/publish/wwwroot/_framework/blazor.web.js \
-    || (echo "ERROR: publish output missing wwwroot/_framework/blazor.web.js (restore must run with .razor files present)" && exit 1)
+    || (echo "FATAL: publish output is missing wwwroot/_framework/blazor.web.js" \
+        && echo "HINT: do not run dotnet restore with only the .csproj present" \
+        && exit 1)
 
 # ---------- 运行阶段 ----------
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
