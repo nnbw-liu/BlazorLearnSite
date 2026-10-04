@@ -40,7 +40,8 @@ docker run -d --name blazor-learn-site \
 docker compose up -d --build
 ```
 
-验证：`curl http://服务器IP:8080` 应返回页面 HTML；`curl http://服务器IP:8080/health` 返回 `Healthy`。
+验证：`curl http://服务器IP:8080` 应返回页面 HTML；`curl http://服务器IP:8080/health` 返回 `Healthy`；
+`curl -I http://服务器IP:8080/_framework/blazor.web.js` 必须返回 **200**（返回 404 说明镜像里缺 `wwwroot/_framework`，站点会“能看不能用”，见第 7 节）。
 
 **远端访问**：服务器防火墙放行 8080 端口（云厂商安全组 + 系统防火墙）。之后浏览器访问 `http://服务器IP:8080`。
 
@@ -142,6 +143,7 @@ HTTPS 用 certbot 一键签发：`sudo certbot --nginx -d your-domain.com`。
 
 | 现象 | 原因与处理 |
 |---|---|
+| 页面能正常显示，但所有按钮（如首页「开始学习」）点了没反应、登录后进度不更新 | 交互脚本没加载：F12 → Network 搜 `blazor.web.js`，若是 **404** 说明发布产物缺少 `wwwroot/_framework`。根因是 Docker 构建时 `dotnet restore` 早于 `.razor` 源码复制，Web SDK 未注入 `Microsoft.AspNetCore.App.Internal.Assets`（Dockerfile 已修正为 restore 前先复制 `Components/`）。处理：`docker compose build --no-cache` 重建镜像并重新部署 |
 | 页面「正在重新连接…」 | 反代没转发 `Upgrade`/`Connection` 头（Nginx 必须配，见 3.2） |
 | 注册后无法登录 | 旧版要求邮箱确认；本项目已设 `RequireConfirmedAccount=false` |
 | 数据库只读报错 | 容器内 `Data` 目录无写权限，挂卷时确认权限；IIS 检查应用池账号 |
